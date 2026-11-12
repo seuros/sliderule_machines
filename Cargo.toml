@@ -1,0 +1,23 @@
+[package]
+name = "sliderule-machines"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+description = "Deterministic integer logarithms with stated one-sided error bounds and enclosing intervals"
+readme = "README.md"
+exclude = ["src/**/tests.rs", "src/tests/", "tests/", ".github/"]
+keywords = ["logarithm", "fixed-point", "deterministic", "integer", "no-std"]
+categories = ["no-std", "mathematics", "algorithms"]
+
+[lints.rust]
+unsafe_code = "deny"
+unused_must_use = "warn"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
