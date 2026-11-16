@@ -23,7 +23,8 @@ assert_eq!(log2_floor::<56>(8), 3 << 56);
 assert_eq!(ln_floor::<56>(2), 0x00B1_7217_F7D1_CF79);
 
 // ln(3 * 5 / 7) with 48 fraction bits, as an interval that contains it.
-let Interval { lo, hi } = ln_ratio::<48>(&[3, 5], &[7]);
+let interval: Interval = ln_ratio::<48>(&[3, 5], &[7]);
+let (lo, hi) = (interval.lo(), interval.hi());
 assert!(lo < hi && hi - lo <= 2);
 
 // Usable in constants.
@@ -46,13 +47,16 @@ with fewer fraction bits is a prefix of one with more.
 `2^-55` at `F = 56`, below `3 * 2^-58` at `F = 58`. The error is one-sided:
 the result is never above the true logarithm.
 
-**`ln_ratio::<F>(numerators, denominators)`** returns an `Interval { lo, hi }`
-around `ln` of the product of the numerators over the product of the
-denominators, in units of `2^-F`. The interval always contains the exact
+**`ln_ratio::<F>(numerators, denominators)`** returns an `Interval`, read with
+`lo()` and `hi()`, around `ln` of the product of the numerators over the
+product of the denominators, in units of `2^-F`. The interval always contains the exact
 value. Each factor is taken at 58 fraction bits, the sum is widened by
 `3 * 2^-58` per factor on the side that factor can be wrong on, and the ends
 are rounded outwards. Four factors at `F = 48` are within `2^-54` of the exact
 logarithm before rounding, and the interval is one or two units wide.
+
+**`Interval::new(lo, hi)`** answers `None` when `lo > hi`. Its fields are
+private, so every `Interval` (built or returned) has `lo() <= hi()`.
 
 ## Arithmetic
 

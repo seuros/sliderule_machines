@@ -1,4 +1,5 @@
 #![no_std]
+#![cfg_attr(not(test), deny(clippy::indexing_slicing))]
 #![doc = include_str!("../README.md")]
 
 /// Largest fraction-bit count a logarithm can be asked for.
@@ -83,12 +84,36 @@ pub const fn ln_floor<const F: u32>(value: u64) -> u64 {
 /// An interval guaranteed to contain an exact real value.
 ///
 /// Both ends are in units of `2^-F`, for the `F` the interval was asked for.
+/// The lower end is never above the upper end; [`Interval::new`] refuses a
+/// pair that is, so no `Interval` can be empty.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Interval {
-    /// Not above the exact value.
-    pub lo: i128,
-    /// Not below the exact value.
-    pub hi: i128,
+    lo: i128,
+    hi: i128,
+}
+
+impl Interval {
+    /// The interval `[lo, hi]`, or `None` when `lo` is above `hi`.
+    #[must_use]
+    pub const fn new(lo: i128, hi: i128) -> Option<Self> {
+        if lo <= hi {
+            Some(Self { lo, hi })
+        } else {
+            None
+        }
+    }
+
+    /// Lower end: not above the exact value.
+    #[must_use]
+    pub const fn lo(&self) -> i128 {
+        self.lo
+    }
+
+    /// Upper end: not below the exact value.
+    #[must_use]
+    pub const fn hi(&self) -> i128 {
+        self.hi
+    }
 }
 
 /// Interval around the natural logarithm of a ratio of products,
@@ -110,8 +135,11 @@ pub const fn ln_ratio<const F: u32>(numerators: &[u64], denominators: &[u64]) ->
     const { assert!(F <= MAX_FRACTION_BITS) };
     let (above, raised) = sum_ln(numerators);
     let (below, lowered) = sum_ln(denominators);
+    // Both sums and slacks lie in [0, 2^125) (see `sum_ln`), and
+    // F <= WORK_BITS is checked at compile time: nothing below can wrap.
     let value = above - below;
     let drop = WORK_BITS - F;
+    // Both slacks are non-negative, so `lo <= hi` holds by construction.
     Interval {
         lo: (value - lowered) >> drop,
         hi: -((-(value + raised)) >> drop),
@@ -121,13 +149,15 @@ pub const fn ln_ratio<const F: u32>(numerators: &[u64], denominators: &[u64]) ->
 /// Sum of the working-precision logarithms of `factors`, and a strict bound
 /// on how far that sum falls short of the exact one.
 const fn sum_ln(factors: &[u64]) -> (i128, i128) {
+    // A slice holds under 2^61 u64s and each logarithm (and the slack) is
+    // below 2^64, so both sums stay below 2^125.
     let mut sum = 0_i128;
     let mut slack = 0_i128;
-    let mut index = 0;
-    while index < factors.len() {
-        sum += ln_floor::<WORK_BITS>(factors[index]) as i128;
+    let mut rest = factors;
+    while let [factor, tail @ ..] = rest {
+        sum += ln_floor::<WORK_BITS>(*factor) as i128;
         slack += WORK_SLACK;
-        index += 1;
+        rest = tail;
     }
     (sum, slack)
 }

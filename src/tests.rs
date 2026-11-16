@@ -176,11 +176,8 @@ fn logarithms_evaluate_in_const_context_to_pinned_values() {
     assert_eq!(ln_floor::<56>(2), LN_2_Q64 >> 8);
     assert_eq!(ln_floor::<56>(u64::MAX), 0x2C5C_85FD_F473_DE6A);
     assert_eq!(
-        LN_TWO,
-        Interval {
-            lo: 0xB172_17F7_D1CF,
-            hi: 0xB172_17F7_D1D0
-        }
+        Some(LN_TWO),
+        Interval::new(0xB172_17F7_D1CF, 0xB172_17F7_D1D0)
     );
 }
 
@@ -193,8 +190,8 @@ fn ln_two_constant_matches_an_independent_series() {
     assert_eq!(u128::from(LN_2_Q64), sum >> (120 - 64));
     let interval = ln_ratio::<48>(&[2, 1], &[1, 1]);
     let exact = i128::try_from(sum >> (120 - 48)).unwrap_or(0);
-    assert!(interval.lo <= exact && exact < interval.hi);
-    assert!(interval.hi - interval.lo <= 2);
+    assert!(interval.lo() <= exact && exact < interval.hi());
+    assert!(interval.hi() - interval.lo() <= 2);
 }
 
 #[test]
@@ -215,15 +212,15 @@ fn ratio_interval_brackets_the_floating_point_value() {
         );
         let interval = ln_ratio::<48>(&[a, b], &[c, d]);
         let float = (a as f64).ln() + (b as f64).ln() - (c as f64).ln() - (d as f64).ln();
-        assert!(interval.lo < interval.hi && interval.hi - interval.lo <= 2);
-        let lo = interval.lo as f64 / (1_u64 << 48) as f64;
+        assert!(interval.lo() < interval.hi() && interval.hi() - interval.lo() <= 2);
+        let lo = interval.lo() as f64 / (1_u64 << 48) as f64;
         assert!((lo - float).abs() < 1e-12, "{a} {b} {c} {d}");
     }
     assert_eq!(
         ln_ratio::<48>(&[1, 1], &[1, 1]),
         ln_ratio::<48>(&[7, 9], &[9, 7])
     );
-    assert!(ln_ratio::<48>(&[u64::MAX, u64::MAX], &[1, 1]).hi < 89 << 48);
+    assert!(ln_ratio::<48>(&[u64::MAX, u64::MAX], &[1, 1]).hi() < 89 << 48);
 }
 
 #[test]
@@ -237,14 +234,14 @@ fn ratio_interval_encloses_the_reference_value() {
                 for &(d, _, ln_d) in REFERENCE.iter().step_by(3) {
                     let exact = (ln_a + ln_b).cast_signed() - (ln_c + ln_d).cast_signed();
                     let interval = ln_ratio::<48>(&[a, b], &[c, d]);
-                    assert!((interval.lo << shift) < exact + 2, "{a} {b} {c} {d}");
-                    assert!((interval.hi << shift) > exact - 2, "{a} {b} {c} {d}");
-                    assert!(interval.lo < interval.hi && interval.hi - interval.lo <= 2);
+                    assert!((interval.lo() << shift) < exact + 2, "{a} {b} {c} {d}");
+                    assert!((interval.hi() << shift) > exact - 2, "{a} {b} {c} {d}");
+                    assert!(interval.lo() < interval.hi() && interval.hi() - interval.lo() <= 2);
                     let full = ln_ratio::<WORK_BITS>(&[a, b], &[c, d]);
-                    assert!((full.lo << wide) < exact + 2, "{a} {b} {c} {d}");
-                    assert!((full.hi << wide) > exact - 2, "{a} {b} {c} {d}");
-                    assert_eq!(full.hi - full.lo, 4 * WORK_SLACK);
-                    assert_eq!(interval.lo, full.lo >> (WORK_BITS - 48));
+                    assert!((full.lo() << wide) < exact + 2, "{a} {b} {c} {d}");
+                    assert!((full.hi() << wide) > exact - 2, "{a} {b} {c} {d}");
+                    assert_eq!(full.hi() - full.lo(), 4 * WORK_SLACK);
+                    assert_eq!(interval.lo(), full.lo() >> (WORK_BITS - 48));
                 }
             }
         }
@@ -262,32 +259,44 @@ fn ratio_interval_holds_for_ratios_near_one() {
         // ln((n + 1) / n) = ln_1p(1 / n), which f64 resolves far below 2^-48.
         let float = (1.0 / n as f64).ln_1p() * scale;
         let up = ln_ratio::<48>(&[n + 1], &[n]);
-        assert!(up.lo as f64 <= float + 0.01 && float - 0.01 <= up.hi as f64);
-        assert!(up.lo >= 0 && up.hi - up.lo <= 2, "{n}");
+        assert!(up.lo() as f64 <= float + 0.01 && float - 0.01 <= up.hi() as f64);
+        assert!(up.lo() >= 0 && up.hi() - up.lo() <= 2, "{n}");
         let down = ln_ratio::<48>(&[n], &[n + 1]);
-        assert_eq!((down.lo, down.hi), (-up.hi, -up.lo), "{n}");
+        assert_eq!((down.lo(), down.hi()), (-up.hi(), -up.lo()), "{n}");
     }
     for n in [u64::MAX - 1, (1 << 63) - 1, 1 << 62, (1 << 53) + 1] {
         // The exact value is positive and far below one unit of 2^-48.
         let up = ln_ratio::<48>(&[n + 1], &[n]);
-        assert!(up.lo <= 0 && 0 < up.hi && up.hi - up.lo <= 2, "{n}");
+        assert!(up.lo() <= 0 && 0 < up.hi() && up.hi() - up.lo() <= 2, "{n}");
     }
 }
 
 #[test]
 fn ratio_interval_handles_empty_products_zeros_and_every_width() {
-    assert_eq!(ln_ratio::<48>(&[], &[]), Interval { lo: 0, hi: 0 });
+    assert_eq!(Some(ln_ratio::<48>(&[], &[])), Interval::new(0, 0));
     assert_eq!(ln_ratio::<48>(&[0], &[]), ln_ratio::<48>(&[1], &[]));
     assert_eq!(ln_ratio::<48>(&[], &[0]), ln_ratio::<48>(&[], &[1]));
     let one_sided = ln_ratio::<58>(&[3], &[]);
-    assert_eq!(one_sided.lo, i128::from(ln_floor::<58>(3)));
-    assert_eq!(one_sided.hi, one_sided.lo + WORK_SLACK);
+    assert_eq!(one_sided.lo(), i128::from(ln_floor::<58>(3)));
+    assert_eq!(one_sided.hi(), one_sided.lo() + WORK_SLACK);
     let coarse = ln_ratio::<0>(&[1000, 1000, 1000], &[7]);
-    assert_eq!((coarse.lo, coarse.hi), (18, 19));
+    assert_eq!((coarse.lo(), coarse.hi()), (18, 19));
     let negative = ln_ratio::<0>(&[7], &[1000, 1000, 1000]);
-    assert_eq!((negative.lo, negative.hi), (-19, -18));
+    assert_eq!((negative.lo(), negative.hi()), (-19, -18));
     let many = [u64::MAX; 64];
     let top = ln_ratio::<48>(&many, &[]);
-    assert!(top.lo < top.hi && top.hi - top.lo <= 2);
-    assert_eq!(top.lo >> 48, 2839);
+    assert!(top.lo() < top.hi() && top.hi() - top.lo() <= 2);
+    assert_eq!(top.lo() >> 48, 2839);
+}
+
+#[test]
+fn interval_new_refuses_an_empty_interval() {
+    const BUILT: Option<Interval> = Interval::new(2, 3);
+    assert_eq!(Interval::new(1, 0), None);
+    assert_eq!(Interval::new(i128::MAX, i128::MIN), None);
+    let point = Interval::new(-7, -7);
+    assert_eq!(point.map(|i| (i.lo(), i.hi())), Some((-7, -7)));
+    let wide = Interval::new(i128::MIN, i128::MAX);
+    assert_eq!(wide.map(|i| (i.lo(), i.hi())), Some((i128::MIN, i128::MAX)));
+    assert_eq!(BUILT, Some(ln_ratio::<0>(&[10], &[])));
 }
